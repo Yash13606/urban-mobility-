@@ -15,3 +15,9 @@ test('unknown SQL identifiers cannot execute arbitrary statements',()=>{
   assert.throws(()=>savedQuery('SELECT * FROM mysql.user',1),/Unknown saved query/);
   assert.equal(new Set(QUERY_LIBRARY.map(q=>q.id)).size,QUERY_LIBRARY.length);
 });
+test('recursive CTE generates calendar spine query with left join',()=>{
+  const result=savedQuery('date-series-gaps',1,{road:3});
+  assert.match(result.sql,/WITH RECURSIVE calendar AS/);
+  assert.match(result.sql,/LEFT JOIN filtered f ON f\.observation_date = c\.cal_date/);
+  assert.equal(result.category,'Recursive CTE');
+});

@@ -26,7 +26,7 @@ A second, clearly separate part simulates a four-way junction under **fixed** an
 | **Explore** | Four tabs: time and weather patterns; a road × time-block congestion heatmap with area groupings; **operations** (capacity, travel-time index, signal compliance, incidents, public transport, parking, pedestrians, roadwork effect); and the latest rows. |
 | **Live simulation** | Seeded fixed-vs-adaptive runs with queue chart, action timeline, run history and a persisted comparison. Includes **dataset peak / off-peak** scenarios scaled from the imported time-block volumes. |
 | **Schema** | Live table, column and key metadata with row counts. |
-| **SQL lab** | Eleven curated, parameterised exercises (joins, CTEs, window functions, subqueries, JSON, UNION) with the SQL, bound parameters, timing and CSV download, plus a **read-only editor** for your own SELECT/WITH queries. |
+| **SQL lab** | Twelve curated, parameterised exercises (joins, CTEs, recursive CTEs, window functions, subqueries, JSON, UNION) with the SQL, bound parameters, timing and CSV download, plus a **read-only editor** for your own SELECT/WITH queries. |
 | **Performance** | `EXPLAIN` comparison with and without an index; three views and a refreshable daily summary table. |
 | **Data & provenance** | Import checksum, validation counts and what the data can and cannot tell you. |
 
@@ -106,22 +106,23 @@ Adaptive timing wins under lopsided demand and **loses under balanced demand**; 
 
 **Requirements:** Node.js 20.9+, MySQL Server 8.0.18+ (Workbench is handy), and the dataset CSV in `data/raw/` (see [Dataset](#dataset)).
 
-```powershell
+```bash
 npm install
-powershell -ExecutionPolicy Bypass -File scripts\configure-local.ps1   # writes the ignored .env
+npm run setup             # cross-platform (macOS/Linux/Windows): writes ignored .env
 npm run db:setup          # create schema, views, procedure, simulation tables
 npm run data:import       # load the CSV
 npm run verify:database   # read-only health check
 npm run dev               # http://127.0.0.1:3000  (health: /api/health)
 ```
 
-The configuration script asks for the MySQL host, port, user and password and saves them only to `.env`, which Git ignores. On another OS, copy `.env.example` to `.env` and fill it in by hand. The MySQL user needs permission to create the `urban_mobility` database, tables, views and a stored procedure.
+The configuration script asks for the MySQL host, port, user and password and saves them securely to `.env`, which Git ignores. Alternatively, on Windows PowerShell you can run `scripts\configure-local.ps1`. The MySQL user needs permission to create the `urban_mobility` database, tables, views and a stored procedure.
 
 | Script | Purpose |
 | --- | --- |
 | `npm run dev` / `build` / `start` | Run, build and serve the Next.js app on `127.0.0.1:3000` |
 | `npm test` | Pure Node tests for the parser, queries, simulation model, metrics and persistence |
 | `npm run typecheck` / `lint` | TypeScript and ESLint checks |
+| `npm run setup` | Cross-platform configuration wizard to generate `.env` |
 | `npm run db:setup` | Create or update the MySQL schema (safe to repeat) |
 | `npm run data:import` | Import the CSV, idempotent per file checksum |
 | `npm run data:download` | Fetch the CSV from Kaggle (needs `pip install kagglehub`) |

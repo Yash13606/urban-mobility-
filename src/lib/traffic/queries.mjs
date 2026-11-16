@@ -48,6 +48,24 @@ FROM filtered ORDER BY source_row LIMIT 50`},
   {id:'set-union',title:'Roads with high congestion or roadwork',category:'Set',features:['UNION','DISTINCT'],why:'UNION deduplicates roads found by either condition. Both branches use the same filtered source records.',body:`SELECT road_name FROM filtered WHERE congestion_level='High'
 UNION SELECT road_name FROM filtered WHERE roadwork=1
 ORDER BY road_name LIMIT 100`},
+  {id:'date-series-gaps',title:'Calendar date series & missing observations',category:'Recursive CTE',features:['WITH RECURSIVE','LEFT JOIN','Calendar spine'],why:'Generates a continuous daily date series between the earliest and latest observed dates using a recursive CTE, then LEFT JOINs the observations to reveal unobserved calendar dates.',body:`SELECT c.cal_date AS calendar_date,
+  COUNT(f.observation_id) AS readings,
+  COALESCE(SUM(f.vehicle_count), 0) AS recorded_volume,
+  ROUND(AVG(f.average_speed), 2) AS average_speed,
+  CASE WHEN COUNT(f.observation_id) = 0 THEN 'No readings' ELSE 'Observed' END AS observation_status
+FROM (
+  WITH RECURSIVE calendar AS (
+    SELECT MIN(observation_date) AS cal_date, MAX(observation_date) AS max_date FROM filtered
+    UNION ALL
+    SELECT DATE_ADD(cal_date, INTERVAL 1 DAY), max_date
+    FROM calendar
+    WHERE cal_date < max_date
+  )
+  SELECT cal_date FROM calendar
+) c
+LEFT JOIN filtered f ON f.observation_date = c.cal_date
+GROUP BY c.cal_date
+ORDER BY c.cal_date LIMIT 200`},
 ];
 export function savedQuery(id,importId,filters={}){
   const entry=QUERY_LIBRARY.find(q=>q.id===id);if(!entry)throw new Error('Unknown saved query');

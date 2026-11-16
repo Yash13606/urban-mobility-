@@ -28,9 +28,9 @@ The source is complete and its pure Node tests (`npm test`) were written to run 
 
 Run each command separately, save its output, and fix errors before moving on.
 
-```powershell
+```bash
 npm install
-powershell -ExecutionPolicy Bypass -File scripts\configure-local.ps1
+npm run setup             # cross-platform setup wizard (or powershell -File scripts\configure-local.ps1)
 npm run db:setup
 npm run data:import
 npm run verify:database
@@ -41,7 +41,7 @@ npm run build
 npm run dev
 ```
 
-`configure-local.ps1` asks for the same host, port and username you use in Workbench (the password prompt is hidden) and writes the ignored `.env` file. If `npm install` fails because of network or proxy settings, resolve that and rerun it. The `package-lock.json` it generates is worth committing.
+`npm run setup` (or `configure-local.ps1` on Windows) asks for the host, port, username and password you use in Workbench (the password prompt is hidden) and writes the ignored `.env` file. If `npm install` fails because of network or proxy settings, resolve that and rerun it. The `package-lock.json` it generates is worth committing.
 
 Then, with the dev server running:
 

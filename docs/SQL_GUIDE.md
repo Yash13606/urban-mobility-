@@ -84,6 +84,35 @@ ORDER BY high_reading_percent DESC, road_name, time_block;
 
 `congestion_level = 'High'` evaluates as a Boolean in MySQL; its average is the fraction of high readings. The result describes this sample; it is not a calibrated traffic threshold.
 
+## Recursive CTE: Calendar date series and missing observation days
+
+```sql
+WITH RECURSIVE calendar AS (
+  SELECT MIN(observation_date) AS cal_date,
+         MAX(observation_date) AS max_date
+  FROM v_traffic_observation
+  WHERE import_id = (SELECT active_import_id FROM app_state WHERE singleton_id = 1)
+  UNION ALL
+  SELECT DATE_ADD(cal_date, INTERVAL 1 DAY), max_date
+  FROM calendar
+  WHERE cal_date < max_date
+)
+SELECT c.cal_date AS calendar_date,
+       COUNT(o.observation_id) AS readings,
+       COALESCE(SUM(o.vehicle_count), 0) AS recorded_volume,
+       ROUND(AVG(o.average_speed), 2) AS average_speed,
+       CASE WHEN COUNT(o.observation_id) = 0 THEN 'No readings' ELSE 'Observed' END AS observation_status
+FROM calendar c
+LEFT JOIN v_traffic_observation o
+  ON o.observation_date = c.cal_date
+  AND o.import_id = (SELECT active_import_id FROM app_state WHERE singleton_id = 1)
+GROUP BY c.cal_date
+ORDER BY c.cal_date
+LIMIT 200;
+```
+
+A common enterprise SQL challenge is time-series gaps: when a sensor or road has zero records on a particular calendar day, a normal `GROUP BY` omits that day entirely. A recursive CTE generates an unbroken sequence of dates (a "date spine") between the earliest and latest observation, and a `LEFT JOIN` exposes missing dates with zero counts.
+
 ## Rank locations by date and compare adjacent observed dates
 
 ```sql
@@ -151,6 +180,21 @@ These are ordinary views plus a physical summary table maintained by `CALL refre
 ## Query plan comparison
 
 The website's Performance page (Index benchmark tab) runs the same filtered observation query with `IGNORE INDEX` and `FORCE INDEX (idx_obs_sensor_date)`, checks result checksums, and shows `EXPLAIN FORMAT=JSON` and `EXPLAIN ANALYZE`. Report the values observed on the presentation machine. Timings include database-driver round trips and are sensitive to caches and machine load; an index can be slower for some scopes.
+
+## High-scale table partitioning (`sql/006_partitioning.sql`)
+
+For large-scale sensor workloads, `traffic_observation_partitioned` illustrates range partitioning by quarter:
+
+```sql
+EXPLAIN
+SELECT COUNT(*) AS readings,
+       SUM(vehicle_count) AS total_volume,
+       ROUND(AVG(average_speed), 2) AS mean_speed
+FROM traffic_observation_partitioned
+WHERE observation_date BETWEEN '2023-01-01' AND '2023-03-31';
+```
+
+In the `EXPLAIN` output, the `partitions` column shows that MySQL scans **only partition `p2023_q1`** and prunes all others (`p2023_q2` through `p_future`), significantly decreasing disk I/O for date-bounded analytical queries. In addition, dropping an expired partition (`ALTER TABLE ... DROP PARTITION p2023_q1`) reclaims storage in $O(1)$ time without write log amplification.
 
 ## Writing your own queries
 
