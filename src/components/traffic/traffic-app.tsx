@@ -6,6 +6,7 @@ import { SimulationLab } from "@/components/simulation/simulation-lab";
 import { EMPTY, useApi, type Filters } from "./api";
 import { FilterBar } from "./filter-bar";
 import { Explore } from "./pages/explore";
+import { Priorities } from "./pages/priorities";
 import { Overview } from "./pages/overview";
 import { Performance } from "./pages/performance";
 import { Provenance } from "./pages/provenance";
@@ -16,6 +17,7 @@ import { Loading } from "./ui";
 type NavItem = { id: string; label: string; icon: LucideIcon; group: string; subtitle: string; filters?: boolean };
 
 const NAV: NavItem[] = [
+  { id: "priorities", label: "Priority insights", icon: CircleHelp, group: "ANALYZE", filters: true, subtitle: "Where to investigate first, with evidence from the selected historical readings." },
   { id: "overview", label: "Overview", icon: LayoutDashboard, group: "ANALYZE", filters: true, subtitle: "Headline numbers, notable roads and trends in the imported traffic readings." },
   { id: "explore", label: "Explore", icon: BarChart3, group: "ANALYZE", filters: true, subtitle: "Time, weather, roads, areas and operational measures in one place." },
   { id: "simulation", label: "Live simulation", icon: TrafficCone, group: "ANALYZE", subtitle: "Fixed and adaptive signal control on the same synthetic traffic demand." },
@@ -109,6 +111,7 @@ export function TrafficApp() {
           )}
           {NEEDS_ANALYTICS.includes(page) && analytics.loading && <Loading>Querying the active dataset…</Loading>}
 
+          {page === "priorities" && <Priorities filters={applied} explore={(road, timeBlock) => { setApplied({ ...applied, road, timeBlock }); setDraft({ ...applied, road, timeBlock }); setPage("explore"); }} simulate={() => setPage("simulation")} />}
           {page === "overview" && analytics.data && <Overview data={analytics.data} openSimulation={group => { setSimulationGroup(group || ""); setPage("simulation"); }} />}
           {page === "explore" && analytics.data && <Explore data={analytics.data} boot={b} filters={applied} />}
           {page === "simulation" && <SimulationLab initialGroup={simulationGroup} />}

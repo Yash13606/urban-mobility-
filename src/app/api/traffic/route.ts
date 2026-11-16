@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseFilters, toCsv } from '@/lib/traffic/core.mjs';
 import { publicError } from '@/lib/traffic/database.mjs';
-import { analytics, benchmark, bootstrap, customSql, operations, refreshSummary, runSavedQuery, schema, summaries } from '@/lib/traffic/service.mjs';
+import { investigationPlans, saveInvestigation, priorities, analytics, benchmark, bootstrap, customSql, operations, refreshSummary, runSavedQuery, schema, summaries } from '@/lib/traffic/service.mjs';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
     const params=new URLSearchParams(request.nextUrl.searchParams);const action=params.get('action')||'bootstrap';const id=params.get('id')||'';const format=params.get('format');
     for(const key of ['action','id','format'])params.delete(key);
     const filters=parseFilters(params);let data;
-    if(action==='bootstrap')data=await bootstrap();
+    if(action==='plans')data=await investigationPlans();
+    else if(action==='priorities')data=await priorities(filters);
+    else if(action==='bootstrap')data=await bootstrap();
     else if(action==='analytics')data=await analytics(filters);
     else if(action==='schema')data=await schema();
     else if(action==='views')data=await summaries();
@@ -34,7 +36,8 @@ export async function POST(request: NextRequest) {
     const text=await request.text();if(text.length>16384)return NextResponse.json({error:'Request is too large'},{status:413});
     let body;try{body=JSON.parse(text);}catch{return NextResponse.json({error:'Invalid JSON body'},{status:400});}
     const filters=parseFilters(body.filters||{});let data;
-    if(body.action==='query')data=await runSavedQuery(body.id,filters);
+    if(body.action==='savePlan'||body.action==='planStatus')data=await saveInvestigation(body,filters);
+    else if(body.action==='query')data=await runSavedQuery(body.id,filters);
     else if(body.action==='sql')data=await customSql(body.sql);
     else if(body.action==='benchmark')data=await benchmark(filters);
     else if(body.action==='refresh')data=await refreshSummary();

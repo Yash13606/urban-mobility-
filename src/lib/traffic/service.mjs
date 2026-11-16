@@ -116,3 +116,56 @@ export async function operations(filters={}){
   ]);
   return {import_id:source.import_id,kpis:kpis[0],timeBlocks,roads,roadwork,filters};
 }
+
+export async function priorities(filters={}){
+  const source=await activeImport(),where=buildWhere(source.import_id,filters);
+  const sql=`WITH selected AS (SELECT * FROM v_traffic_observation o ${where.sql}),
+    blocks AS (SELECT road_id,road_name,area,time_block,COUNT(*) AS readings,
+      COUNT(DISTINCT observation_date) AS days,MIN(observation_date) AS first_date,MAX(observation_date) AS last_date,
+      SUM(congestion_level='High') AS high_readings,AVG(average_speed) AS mean_speed,
+      AVG(vehicle_count) AS mean_volume FROM selected GROUP BY road_id,road_name,area,time_block),
+    roads AS (SELECT road_id,COUNT(*) AS total_readings,SUM(congestion_level='High') AS total_high,
+      SUM(average_speed) AS total_speed FROM selected GROUP BY road_id)
+    SELECT b.*,100.0*b.high_readings/b.readings AS high_percent,
+      100.0*(r.total_high-b.high_readings)/NULLIF(r.total_readings-b.readings,0) AS other_high_percent,
+      (r.total_speed-b.mean_speed*b.readings)/NULLIF(r.total_readings-b.readings,0) AS other_speed,
+      r.total_readings-b.readings AS other_readings
+    FROM blocks b JOIN roads r ON r.road_id=b.road_id
+    ORDER BY high_percent DESC,b.high_readings DESC,b.road_name,b.time_block`;
+  const rows=await query(sql,where.params);
+  const changes=await query(`WITH f AS (SELECT * FROM v_traffic_observation o ${where.sql}),
+    bounds AS (SELECT MIN(observation_date) AS first_date,MAX(observation_date) AS last_date,
+      DATE_ADD(MIN(observation_date),INTERVAL FLOOR(DATEDIFF(MAX(observation_date),MIN(observation_date))/2) DAY) AS midpoint FROM f),
+    grouped AS (SELECT road_id,road_name,time_block,
+      SUM(observation_date<=midpoint) AS earlier_n,SUM(observation_date>midpoint) AS later_n,
+      COUNT(DISTINCT CASE WHEN observation_date<=midpoint THEN observation_date END) AS earlier_days,
+      COUNT(DISTINCT CASE WHEN observation_date>midpoint THEN observation_date END) AS later_days,
+      100*AVG(CASE WHEN observation_date<=midpoint THEN congestion_level='High' END) AS earlier_high,
+      100*AVG(CASE WHEN observation_date>midpoint THEN congestion_level='High' END) AS later_high,
+      MIN(first_date) AS first_date,MIN(midpoint) AS midpoint,MAX(last_date) AS last_date
+      FROM f CROSS JOIN bounds GROUP BY road_id,road_name,time_block)
+    SELECT *,later_high-earlier_high AS change_pp FROM grouped
+    WHERE earlier_n>=30 AND later_n>=30 AND earlier_days>=7 AND later_days>=7
+    ORDER BY change_pp DESC,road_name,time_block`,where.params);
+  const eligible=rows.filter(r=>Number(r.readings)>=30&&Number(r.days)>=7&&Number(r.high_readings)>0);
+  return {changes,rows:eligible,excluded:rows.length-eligible.length,groups:rows.length,import_id:source.import_id,sql,parameters:where.params};
+}
+
+export async function investigationPlans(){
+  return {rows:(await query('SELECT * FROM investigation_plan ORDER BY updated_at DESC,plan_id DESC LIMIT 200')).map(r=>({...r,evidence:typeof r.evidence==='string'?JSON.parse(r.evidence):r.evidence}))};
+}
+export async function saveInvestigation(body,filters={}){
+  if(body.action==='planStatus'){
+    if(!Number.isSafeInteger(Number(body.id))||Number(body.id)<1||!['Open','Investigating','Reviewed'].includes(body.status))throw new Error('Invalid plan update');
+    const updated=await query('UPDATE investigation_plan SET status=? WHERE plan_id=?',[body.status,body.id]);
+    if(!updated.affectedRows)throw new Error('Invalid plan identifier');
+  }else{
+    const owner=String(body.owner||'').trim(),next=String(body.next_action||'').trim();
+    if(!owner||owner.length>120||!next||next.length>1000)throw new Error('Invalid owner or next action');
+    const data=await priorities(filters);
+    const row=data.rows.find(r=>String(r.road_id)===String(body.road)&&r.time_block===body.timeBlock);
+    if(!row)throw new Error('Invalid priority selection; reload the findings');
+    await query('INSERT INTO investigation_plan (owner,next_action,evidence) VALUES (?,?,?)',[owner,next,JSON.stringify({import_id:data.import_id,filters,recorded_at:new Date().toISOString(),finding:row})]);
+  }
+  return investigationPlans();
+}
